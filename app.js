@@ -1,0 +1,408 @@
+(() => {
+  'use strict';
+
+  const STORAGE_KEY = 'kansatsu-records-v1';
+
+  const $ = (sel) => document.querySelector(sel);
+  const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+
+  // ---------- データ層 ----------
+  const loadRecords = () => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  };
+  const saveRecords = (records) => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+  };
+
+  let records = loadRecords();
+
+  // ---------- ユーティリティ ----------
+  const pad = (n) => String(n).padStart(2, '0');
+  const formatTimestamp = (iso) => {
+    const d = new Date(iso);
+    return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
+  const splitNames = (raw) => {
+    if (!raw) return [];
+    return raw
+      .split(/[，、,\s]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+  };
+
+  const escapeHtml = (s) =>
+    String(s).replace(/[&<>"']/g, (c) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+
+  // ---------- タブ切替 ----------
+  const initTabs = () => {
+    $$('.tab-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const tab = btn.dataset.tab;
+        $$('.tab-btn').forEach((b) => b.classList.toggle('active', b === btn));
+        $$('.tab-panel').forEach((p) => {
+          p.classList.toggle('active', p.id === `tab-${tab}`);
+        });
+        if (tab === 'list') renderList();
+        if (tab === 'children') renderChildren();
+      });
+    });
+  };
+
+  // ---------- 音声入力 ----------
+  let recognition = null;
+  let isRecording = false;
+  let interimText = '';
+  let baseText = '';
+
+  const initSpeech = () => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const micBtn = $('#micBtn');
+    const micStatus = $('#micStatus');
+
+    if (!SR) {
+      micStatus.textContent = 'このブラウザは音声入力に対応していません。テキスト欄に直接入力してください。';
+      micBtn.disabled = true;
+      micBtn.style.opacity = '0.6';
+      micBtn.style.cursor = 'not-allowed';
+      return;
+    }
+
+    recognition = new SR();
+    recognition.lang = 'ja-JP';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    recognition.onstart = () => {
+      isRecording = true;
+      micBtn.classList.add('recording');
+      micBtn.querySelector('.mic-label').textContent = '停止';
+      micStatus.textContent = '録音中… もう一度押すと停止します。';
+    };
+
+    recognition.onresult = (event) => {
+      let interim = '';
+      let finalAdd = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) finalAdd += transcript;
+        else interim += transcript;
+      }
+      if (finalAdd) {
+        baseText = (baseText + (baseText ? ' ' : '') + finalAdd).trim();
+      }
+      interimText = interim;
+      const memo = $('#memoText');
+      memo.value = (baseText + (interim ? ' ' + interim : '')).trim();
+    };
+
+    recognition.onerror = (event) => {
+      micStatus.textContent = `音声入力エラー：${event.error}`;
+      stopRecording();
+    };
+
+    recognition.onend = () => {
+      if (isRecording) {
+        // 連続モード時に自然終了したら再開
+        try { recognition.start(); } catch (_) {}
+      }
+    };
+
+    micBtn.addEventListener('click', () => {
+      if (isRecording) stopRecording();
+      else startRecording();
+    });
+  };
+
+  const startRecording = () => {
+    if (!recognition) return;
+    baseText = $('#memoText').value.trim();
+    interimText = '';
+    try {
+      recognition.start();
+    } catch (e) {
+      // すでに開始済みのケース
+    }
+  };
+
+  const stopRecording = () => {
+    isRecording = false;
+    if (recognition) {
+      try { recognition.stop(); } catch (_) {}
+    }
+    const micBtn = $('#micBtn');
+    micBtn.classList.remove('recording');
+    micBtn.querySelector('.mic-label').textContent = '押して話す';
+    $('#micStatus').textContent = '録音を停止しました。内容を確認して保存できます。';
+    if (interimText) {
+      baseText = (baseText + (baseText ? ' ' : '') + interimText).trim();
+      $('#memoText').value = baseText;
+      interimText = '';
+    }
+  };
+
+  // ---------- 保存・クリア ----------
+  const initSaveActions = () => {
+    $('#saveBtn').addEventListener('click', () => {
+      const text = $('#memoText').value.trim();
+      const namesRaw = $('#childNameInput').value.trim();
+      if (!text) {
+        showSaveStatus('記録内容が空です。', true);
+        return;
+      }
+      const record = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        timestamp: new Date().toISOString(),
+        text,
+        names: splitNames(namesRaw),
+      };
+      records.unshift(record);
+      saveRecords(records);
+      showSaveStatus('保存しました。');
+      $('#memoText').value = '';
+      baseText = '';
+      interimText = '';
+      // 名前は次の記録でも使う可能性があるので残す
+    });
+
+    $('#clearBtn').addEventListener('click', () => {
+      $('#memoText').value = '';
+      $('#childNameInput').value = '';
+      baseText = '';
+      interimText = '';
+      showSaveStatus('');
+    });
+  };
+
+  const showSaveStatus = (msg, isError = false) => {
+    const el = $('#saveStatus');
+    el.textContent = msg;
+    el.style.color = isError ? 'var(--danger)' : 'var(--success)';
+    if (msg) {
+      setTimeout(() => {
+        if (el.textContent === msg) el.textContent = '';
+      }, 2500);
+    }
+  };
+
+  // ---------- 一覧表示 ----------
+  const renderList = () => {
+    const listEl = $('#recordsList');
+    const emptyEl = $('#listEmpty');
+    const keyword = ($('#searchInput').value || '').trim().toLowerCase();
+
+    const filtered = keyword
+      ? records.filter((r) => {
+          const inText = r.text.toLowerCase().includes(keyword);
+          const inName = r.names.some((n) => n.toLowerCase().includes(keyword));
+          return inText || inName;
+        })
+      : records;
+
+    listEl.innerHTML = '';
+    if (filtered.length === 0) {
+      emptyEl.style.display = 'block';
+      emptyEl.textContent = keyword
+        ? '一致する記録は見つかりませんでした。'
+        : 'まだ記録がありません。「録音」タブから始めましょう。';
+      return;
+    }
+    emptyEl.style.display = 'none';
+
+    filtered.forEach((r) => {
+      const card = document.createElement('div');
+      card.className = 'record-card';
+      const nameTags = r.names
+        .map((n) => `<span class="name-tag">${escapeHtml(n)}</span>`)
+        .join('');
+      card.innerHTML = `
+        <div class="record-meta">
+          <span class="timestamp">${formatTimestamp(r.timestamp)}</span>
+          ${nameTags}
+        </div>
+        <div class="record-text">${escapeHtml(r.text)}</div>
+        <div class="record-actions">
+          <button class="icon-btn" data-action="edit" data-id="${r.id}">編集</button>
+          <button class="icon-btn danger" data-action="delete" data-id="${r.id}">削除</button>
+        </div>
+      `;
+      listEl.appendChild(card);
+    });
+
+    listEl.querySelectorAll('button[data-action]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.id;
+        const action = btn.dataset.action;
+        if (action === 'delete') {
+          if (confirm('この記録を削除しますか？')) {
+            records = records.filter((r) => r.id !== id);
+            saveRecords(records);
+            renderList();
+          }
+        } else if (action === 'edit') {
+          const rec = records.find((r) => r.id === id);
+          if (!rec) return;
+          const newText = prompt('記録内容を編集', rec.text);
+          if (newText === null) return;
+          const newNames = prompt('子供の名前（区切りOK）', rec.names.join('，'));
+          if (newNames === null) return;
+          rec.text = newText.trim() || rec.text;
+          rec.names = splitNames(newNames);
+          saveRecords(records);
+          renderList();
+        }
+      });
+    });
+  };
+
+  // ---------- 子供別 ----------
+  const renderChildren = () => {
+    const listEl = $('#childrenList');
+    const emptyEl = $('#childrenEmpty');
+    listEl.innerHTML = '';
+
+    const groups = new Map();
+    records.forEach((r) => {
+      if (r.names.length === 0) return;
+      r.names.forEach((name) => {
+        if (!groups.has(name)) groups.set(name, []);
+        groups.get(name).push(r);
+      });
+    });
+
+    if (groups.size === 0) {
+      emptyEl.style.display = 'block';
+      return;
+    }
+    emptyEl.style.display = 'none';
+
+    const sortedNames = Array.from(groups.keys()).sort((a, b) =>
+      a.localeCompare(b, 'ja')
+    );
+
+    sortedNames.forEach((name) => {
+      const entries = groups.get(name);
+      entries.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+      const group = document.createElement('div');
+      group.className = 'child-group';
+      group.innerHTML = `
+        <h3>${escapeHtml(name)} <span class="count">${entries.length}件</span></h3>
+        ${entries
+          .map(
+            (e) => `
+          <div class="child-entry">
+            <span class="timestamp">${formatTimestamp(e.timestamp)}</span>
+            <div class="record-text">${escapeHtml(e.text)}</div>
+          </div>`
+          )
+          .join('')}
+      `;
+      listEl.appendChild(group);
+    });
+  };
+
+  // ---------- 検索 ----------
+  const initSearch = () => {
+    $('#searchInput').addEventListener('input', () => renderList());
+  };
+
+  // ---------- 書き出し ----------
+  const buildExportRows = () => {
+    const rows = [['日時', '子供の名前', '記録内容']];
+    records
+      .slice()
+      .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+      .forEach((r) => {
+        rows.push([formatTimestamp(r.timestamp), r.names.join('，'), r.text]);
+      });
+    return rows;
+  };
+
+  const exportXlsx = () => {
+    if (records.length === 0) {
+      alert('書き出す記録がありません。');
+      return;
+    }
+    if (typeof XLSX === 'undefined') {
+      alert('Excelライブラリの読み込みに失敗しました。CSV書き出しをご利用ください。');
+      return;
+    }
+    const rows = buildExportRows();
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [{ wch: 18 }, { wch: 16 }, { wch: 60 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '観察記録');
+    const today = new Date();
+    const fname = `観察記録_${today.getFullYear()}${pad(today.getMonth() + 1)}${pad(today.getDate())}.xlsx`;
+    XLSX.writeFile(wb, fname);
+  };
+
+  const exportCsv = () => {
+    if (records.length === 0) {
+      alert('書き出す記録がありません。');
+      return;
+    }
+    const rows = buildExportRows();
+    const csv = rows
+      .map((row) =>
+        row
+          .map((cell) => {
+            const s = String(cell ?? '');
+            return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+          })
+          .join(',')
+      )
+      .join('\r\n');
+    // Excel/Googleスプレッドシートで文字化けしないようBOM付き
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const today = new Date();
+    const fname = `観察記録_${today.getFullYear()}${pad(today.getMonth() + 1)}${pad(today.getDate())}.csv`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fname;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const initExport = () => {
+    $('#exportXlsxBtn').addEventListener('click', exportXlsx);
+    $('#exportCsvBtn').addEventListener('click', exportCsv);
+    $('#clearAllBtn').addEventListener('click', () => {
+      if (records.length === 0) {
+        alert('削除する記録がありません。');
+        return;
+      }
+      if (
+        confirm(
+          `すべての記録（${records.length}件）を削除します。よろしいですか？\nこの操作は取り消せません。`
+        )
+      ) {
+        records = [];
+        saveRecords(records);
+        renderList();
+        renderChildren();
+      }
+    });
+  };
+
+  // ---------- 起動 ----------
+  document.addEventListener('DOMContentLoaded', () => {
+    initTabs();
+    initSpeech();
+    initSaveActions();
+    initSearch();
+    initExport();
+    renderList();
+    renderChildren();
+  });
+})();

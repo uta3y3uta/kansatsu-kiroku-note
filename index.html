@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>観察記録ノート</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <h1>観察記録ノート</h1>
+    <p class="subtitle">教室の小さな気づきを，あたたかく残す</p>
+  </header>
+
+  <nav class="tab-nav">
+    <button class="tab-btn active" data-tab="record">録音</button>
+    <button class="tab-btn" data-tab="list">記録一覧</button>
+    <button class="tab-btn" data-tab="children">子供別</button>
+  </nav>
+
+  <main>
+    <!-- 録音タブ -->
+    <section class="tab-panel active" id="tab-record">
+      <div class="recorder-card">
+        <label class="field">
+          <span class="field-label">子供の名前（任意・複数可）</span>
+          <input type="text" id="childNameInput" placeholder="例：ゆうた，はなこ" autocomplete="off" />
+          <span class="hint">複数の名前は「，」「、」「,」「スペース」で区切れます。空欄でもOKです。</span>
+        </label>
+
+        <div class="mic-area">
+          <button id="micBtn" class="mic-btn" aria-label="録音開始">
+            <span class="mic-icon"></span>
+            <span class="mic-label">押して話す</span>
+          </button>
+          <p id="micStatus" class="mic-status">マイクボタンを押すと音声入力が始まります。</p>
+        </div>
+
+        <label class="field">
+          <span class="field-label">記録内容（音声から自動入力／手入力もOK）</span>
+          <textarea id="memoText" rows="5" placeholder="ここに話した内容が表示されます。"></textarea>
+        </label>
+
+        <div class="action-row">
+          <button id="saveBtn" class="primary-btn">この記録を保存</button>
+          <button id="clearBtn" class="ghost-btn">クリア</button>
+        </div>
+        <p id="saveStatus" class="save-status"></p>
+      </div>
+
+      <details class="tip">
+        <summary>うまく動かないときは</summary>
+        <ul>
+          <li>音声入力にはマイクの許可と，Chrome／Edge等の対応ブラウザが必要です。</li>
+          <li>ブラウザがWeb Speech APIに対応していない場合は，テキスト欄に直接入力してください。</li>
+          <li>記録はこの端末のブラウザに保存されます（書き出しでバックアップを推奨）。</li>
+        </ul>
+      </details>
+    </section>
+
+    <!-- 一覧タブ -->
+    <section class="tab-panel" id="tab-list">
+      <div class="toolbar">
+        <input type="search" id="searchInput" placeholder="キーワード検索（本文・名前）" />
+        <div class="export-row">
+          <button id="exportXlsxBtn" class="primary-btn">Excelに書き出し</button>
+          <button id="exportCsvBtn" class="secondary-btn">CSV（Googleスプレッドシート）</button>
+          <button id="clearAllBtn" class="danger-btn">全削除</button>
+        </div>
+      </div>
+      <div id="recordsList" class="records-list"></div>
+      <p id="listEmpty" class="empty-msg">まだ記録がありません。「録音」タブから始めましょう。</p>
+    </section>
+
+    <!-- 子供別タブ -->
+    <section class="tab-panel" id="tab-children">
+      <div id="childrenList" class="children-list"></div>
+      <p id="childrenEmpty" class="empty-msg">名前付きの記録がここにまとまります。</p>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <small>© 観察記録ノート — 教室を温かな居場所にするために</small>
+  </footer>
+
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
