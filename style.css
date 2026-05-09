@@ -138,8 +138,8 @@ textarea { resize: vertical; min-height: 110px; }
 }
 
 .mic-btn {
-  width: clamp(140px, 40vw, 300px);
-  height: clamp(140px, 40vw, 300px);
+  width: clamp(70px, 20vw, 150px);
+  height: clamp(70px, 20vw, 150px);
   border-radius: 50%;
   border: none;
   background: radial-gradient(circle at 30% 25%, #ffd166 0%, #ff9eb1 35%, var(--accent) 70%, var(--accent-dark) 100%);
@@ -149,8 +149,8 @@ textarea { resize: vertical; min-height: 110px; }
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  box-shadow: 0 10px 28px rgba(255, 140, 90, 0.4), inset 0 -8px 22px rgba(236, 106, 58, 0.22);
+  gap: 6px;
+  box-shadow: 0 6px 18px rgba(255, 140, 90, 0.38), inset 0 -6px 16px rgba(236, 106, 58, 0.2);
   transition: transform 0.12s ease, box-shadow 0.18s ease;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
@@ -167,18 +167,18 @@ textarea { resize: vertical; min-height: 110px; }
 }
 
 .mic-icon {
-  width: clamp(48px, 14vw, 100px);
-  height: clamp(48px, 14vw, 100px);
+  width: clamp(24px, 7vw, 50px);
+  height: clamp(24px, 7vw, 50px);
   background: #fff;
   -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z'/></svg>") center / contain no-repeat;
           mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z'/></svg>") center / contain no-repeat;
   filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.15));
 }
 .mic-label {
-  font-size: clamp(0.9rem, 2vw, 1.1rem);
+  font-size: clamp(0.7rem, 1.4vw, 0.85rem);
   font-weight: 700;
-  letter-spacing: 0.08em;
-  text-shadow: 0 2px 6px rgba(168, 49, 40, 0.3);
+  letter-spacing: 0.06em;
+  text-shadow: 0 1px 4px rgba(168, 49, 40, 0.3);
 }
 .mic-status {
   margin-top: 12px;
