@@ -1,15 +1,17 @@
 :root {
-  --bg: #fdf8f3;
+  --bg: #fff5ec;
   --card: #ffffff;
-  --text: #2d2a26;
-  --muted: #6b665f;
-  --accent: #e07b5a;
-  --accent-dark: #c1623f;
-  --soft: #f4ead9;
-  --border: #e8ded0;
-  --danger: #b94c4c;
-  --success: #5a8f6b;
-  --shadow: 0 4px 14px rgba(60, 40, 20, 0.06);
+  --text: #3a2a22;
+  --muted: #8a7a70;
+  --accent: #ff8c5a;
+  --accent-dark: #ec6a3a;
+  --accent2: #ffd166;
+  --accent3: #ff9eb1;
+  --soft: #ffe8d4;
+  --border: #ffe1ca;
+  --danger: #e26a6a;
+  --success: #6cae7e;
+  --shadow: 0 6px 20px rgba(255, 140, 90, 0.12);
 }
 
 * { box-sizing: border-box; }
@@ -29,9 +31,13 @@ html, body {
 }
 .app-header h1 {
   margin: 0;
-  font-size: 1.6rem;
-  letter-spacing: 0.04em;
-  color: var(--accent-dark);
+  font-size: 1.8rem;
+  letter-spacing: 0.06em;
+  background: linear-gradient(90deg, var(--accent-dark), var(--accent), var(--accent3));
+  -webkit-background-clip: text;
+          background-clip: text;
+  color: transparent;
+  font-weight: 800;
 }
 .subtitle {
   margin: 4px 0 0;
@@ -60,10 +66,10 @@ html, body {
 }
 .tab-btn:hover { background: #ecdfca; }
 .tab-btn.active {
-  background: var(--accent);
+  background: linear-gradient(135deg, var(--accent), var(--accent3));
   color: #fff;
-  font-weight: 600;
-  box-shadow: var(--shadow);
+  font-weight: 700;
+  box-shadow: 0 4px 14px rgba(255, 140, 90, 0.35);
 }
 
 main {
@@ -132,43 +138,48 @@ textarea { resize: vertical; min-height: 110px; }
 }
 
 .mic-btn {
-  width: 132px;
-  height: 132px;
+  width: clamp(280px, 80vw, 600px);
+  height: clamp(280px, 80vw, 600px);
   border-radius: 50%;
   border: none;
-  background: linear-gradient(145deg, var(--accent), var(--accent-dark));
+  background: radial-gradient(circle at 30% 25%, #ffd166 0%, #ff9eb1 35%, var(--accent) 70%, var(--accent-dark) 100%);
   color: #fff;
   cursor: pointer;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  box-shadow: 0 6px 18px rgba(224, 123, 90, 0.35);
+  gap: 24px;
+  box-shadow: 0 14px 40px rgba(255, 140, 90, 0.45), inset 0 -10px 30px rgba(236, 106, 58, 0.25);
   transition: transform 0.12s ease, box-shadow 0.18s ease;
-  /* タップ時のハイライトを抑える */
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
-.mic-btn:hover { transform: translateY(-2px); }
-.mic-btn:active { transform: translateY(1px); }
+.mic-btn:hover { transform: translateY(-3px) scale(1.01); }
+.mic-btn:active { transform: translateY(2px) scale(0.99); }
 .mic-btn.recording {
-  background: linear-gradient(145deg, #d6493d, #a83128);
+  background: radial-gradient(circle at 30% 25%, #ff9eb1 0%, #ff6b6b 50%, #d6493d 100%);
   animation: pulse 1.4s infinite;
 }
 @keyframes pulse {
-  0%, 100% { box-shadow: 0 6px 18px rgba(214, 73, 61, 0.4); }
-  50% { box-shadow: 0 6px 28px rgba(214, 73, 61, 0.7); }
+  0%, 100% { box-shadow: 0 14px 40px rgba(214, 73, 61, 0.45), inset 0 -10px 30px rgba(168, 49, 40, 0.3); }
+  50% { box-shadow: 0 14px 60px rgba(214, 73, 61, 0.8), inset 0 -10px 30px rgba(168, 49, 40, 0.3); }
 }
 
 .mic-icon {
-  width: 34px;
-  height: 34px;
+  width: clamp(96px, 28vw, 200px);
+  height: clamp(96px, 28vw, 200px);
   background: #fff;
   -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z'/></svg>") center / contain no-repeat;
           mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z'/></svg>") center / contain no-repeat;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.15));
 }
-.mic-label { font-size: 0.95rem; font-weight: 600; }
+.mic-label {
+  font-size: clamp(1.2rem, 4vw, 2rem);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-shadow: 0 2px 6px rgba(168, 49, 40, 0.3);
+}
 .mic-status {
   margin-top: 12px;
   color: var(--muted);
@@ -347,9 +358,7 @@ textarea { resize: vertical; min-height: 110px; }
   .tab-nav { margin: 8px auto 12px; }
   .tab-btn { padding: 12px 8px; font-size: 0.9rem; }
   main { padding: 0 12px 60px; }
-  .recorder-card { padding: 16px; border-radius: 14px; }
-  .mic-btn { width: 140px; height: 140px; }
-  .mic-icon { width: 38px; height: 38px; }
+  .recorder-card { padding: 16px; border-radius: 18px; }
   .action-row { flex-direction: column; }
   .action-row button { width: 100%; padding: 12px; }
   .toolbar { flex-direction: column; align-items: stretch; }
