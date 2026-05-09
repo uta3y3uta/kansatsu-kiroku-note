@@ -80,8 +80,19 @@
 
     <!-- 子供別タブ -->
     <section class="tab-panel" id="tab-children">
+      <div class="registry-card">
+        <details>
+          <summary>子供を登録（自動ふりわけに使います）</summary>
+          <form id="addChildForm" class="add-child-form">
+            <input type="text" id="newChildName" placeholder="名前（ひらがな・例：ゆうた）" required />
+            <input type="text" id="newChildAliases" placeholder="別の表記・任意（例：悠太，優太）" />
+            <button type="submit" class="primary-btn">登録</button>
+          </form>
+          <p class="hint">登録した名前と別表記が，記録の本文・名前欄に含まれていれば自動でふりわけられます。</p>
+        </details>
+      </div>
       <div id="childrenList" class="children-list"></div>
-      <p id="childrenEmpty" class="empty-msg">名前付きの記録がここにまとまります。</p>
+      <p id="childrenEmpty" class="empty-msg">記録または登録された子供がここにまとまります。</p>
     </section>
   </main>
 

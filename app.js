@@ -2,6 +2,7 @@
   'use strict';
 
   const STORAGE_KEY = 'kansatsu-records-v1';
+  const CHILDREN_KEY = 'kansatsu-children-v1';
 
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => Array.from(document.querySelectorAll(sel));
@@ -21,6 +22,15 @@
 
   let records = loadRecords();
 
+  const loadChildren = () => {
+    try {
+      const raw = localStorage.getItem(CHILDREN_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  };
+  const saveChildren = (cs) => localStorage.setItem(CHILDREN_KEY, JSON.stringify(cs));
+  let children = loadChildren();
+
   // ---------- ユーティリティ ----------
   const pad = (n) => String(n).padStart(2, '0');
   const formatTimestamp = (iso) => {
@@ -28,13 +38,29 @@
     return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
 
+  // カタカナをひらがなへ（漢字はそのまま）
+  const katakanaToHiragana = (s) =>
+    String(s || '').replace(/[\u30A1-\u30F6]/g, (ch) =>
+      String.fromCharCode(ch.charCodeAt(0) - 0x60)
+    );
+
   const splitNames = (raw) => {
+    if (!raw) return [];
+    return raw
+      .split(/[，、,\s]+/)
+      .map((s) => katakanaToHiragana(s.trim()))
+      .filter(Boolean);
+  };
+
+  const splitAliases = (raw) => {
     if (!raw) return [];
     return raw
       .split(/[，、,\s]+/)
       .map((s) => s.trim())
       .filter(Boolean);
   };
+
+  const newId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   const escapeHtml = (s) =>
     String(s).replace(/[&<>"']/g, (c) => ({
@@ -237,74 +263,244 @@
     });
 
     listEl.querySelectorAll('button[data-action]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const id = btn.dataset.id;
-        const action = btn.dataset.action;
-        if (action === 'delete') {
-          if (confirm('この記録を削除しますか？')) {
-            records = records.filter((r) => r.id !== id);
-            saveRecords(records);
-            renderList();
-          }
-        } else if (action === 'edit') {
-          const rec = records.find((r) => r.id === id);
-          if (!rec) return;
-          const newText = prompt('記録内容を編集', rec.text);
-          if (newText === null) return;
-          const newNames = prompt('子供の名前（区切りOK）', rec.names.join('，'));
-          if (newNames === null) return;
-          rec.text = newText.trim() || rec.text;
-          rec.names = splitNames(newNames);
-          saveRecords(records);
-          renderList();
-        }
-      });
+      btn.addEventListener('click', () => handleRecordAction(btn));
     });
   };
 
+  // 共通：記録の編集／削除
+  const editRecord = (id) => {
+    const rec = records.find((r) => r.id === id);
+    if (!rec) return;
+    const newText = prompt('記録内容を編集', rec.text);
+    if (newText === null) return;
+    const newNames = prompt('子供の名前（区切りOK）', rec.names.join('，'));
+    if (newNames === null) return;
+    rec.text = newText.trim() || rec.text;
+    rec.names = splitNames(newNames);
+    saveRecords(records);
+    renderList();
+    renderChildren();
+  };
+
+  const deleteRecord = (id) => {
+    if (!confirm('この記録を削除しますか？')) return;
+    records = records.filter((r) => r.id !== id);
+    saveRecords(records);
+    renderList();
+    renderChildren();
+  };
+
+  const handleRecordAction = (btn) => {
+    const id = btn.dataset.id;
+    const action = btn.dataset.action;
+    if (action === 'delete') deleteRecord(id);
+    else if (action === 'edit') editRecord(id);
+  };
+
   // ---------- 子供別 ----------
+  // 各記録について，登録された子供（名前＋別表記）または記録自身のnames配列に
+  // 一致する子供グループを返す。本文に名前が含まれていれば自動でふりわけ。
+  const childMatchesRecord = (child, record) => {
+    const candidates = [child.name, ...(child.aliases || [])].filter(Boolean);
+    if (record.names.some((n) => candidates.includes(n))) return true;
+    if (candidates.some((c) => record.text.includes(c))) return true;
+    return false;
+  };
+
   const renderChildren = () => {
     const listEl = $('#childrenList');
     const emptyEl = $('#childrenEmpty');
     listEl.innerHTML = '';
 
-    const groups = new Map();
+    // グループ集合：登録済み子供＋記録のnamesに含まれる名前
+    const groupMap = new Map();
+    children.forEach((c) => {
+      groupMap.set(c.name, {
+        key: c.name,
+        displayName: c.name,
+        aliases: c.aliases || [],
+        records: [],
+        childId: c.id,
+      });
+    });
     records.forEach((r) => {
-      if (r.names.length === 0) return;
-      r.names.forEach((name) => {
-        if (!groups.has(name)) groups.set(name, []);
-        groups.get(name).push(r);
+      r.names.forEach((n) => {
+        if (!groupMap.has(n)) {
+          groupMap.set(n, {
+            key: n,
+            displayName: n,
+            aliases: [],
+            records: [],
+            childId: null,
+          });
+        }
       });
     });
 
-    if (groups.size === 0) {
+    // ふりわけ
+    const matchedRecordIds = new Set();
+    groupMap.forEach((group) => {
+      records.forEach((r) => {
+        const child = { name: group.displayName, aliases: group.aliases };
+        if (childMatchesRecord(child, r)) {
+          group.records.push(r);
+          matchedRecordIds.add(r.id);
+        }
+      });
+    });
+
+    const sortedGroups = [...groupMap.values()].sort((a, b) =>
+      a.displayName.localeCompare(b.displayName, 'ja')
+    );
+
+    const visibleGroups = sortedGroups.filter(
+      (g) => g.records.length > 0 || g.childId
+    );
+
+    const unclassified = records.filter((r) => !matchedRecordIds.has(r.id));
+
+    if (visibleGroups.length === 0 && unclassified.length === 0) {
       emptyEl.style.display = 'block';
       return;
     }
     emptyEl.style.display = 'none';
 
-    const sortedNames = Array.from(groups.keys()).sort((a, b) =>
-      a.localeCompare(b, 'ja')
-    );
+    const renderEntry = (r) => `
+      <div class="child-entry">
+        <span class="timestamp">${formatTimestamp(r.timestamp)}</span>
+        <div class="record-text">${escapeHtml(r.text)}</div>
+        <div class="record-actions">
+          <button class="icon-btn" data-action="edit" data-id="${r.id}">編集</button>
+          <button class="icon-btn danger" data-action="delete" data-id="${r.id}">削除</button>
+        </div>
+      </div>`;
 
-    sortedNames.forEach((name) => {
-      const entries = groups.get(name);
-      entries.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
-      const group = document.createElement('div');
-      group.className = 'child-group';
-      group.innerHTML = `
-        <h3>${escapeHtml(name)} <span class="count">${entries.length}件</span></h3>
-        ${entries
-          .map(
-            (e) => `
-          <div class="child-entry">
-            <span class="timestamp">${formatTimestamp(e.timestamp)}</span>
-            <div class="record-text">${escapeHtml(e.text)}</div>
-          </div>`
-          )
-          .join('')}
+    visibleGroups.forEach((group) => {
+      const sortedRecords = group.records
+        .slice()
+        .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+      const aliasText =
+        group.aliases.length > 0
+          ? `<span class="alias">（${escapeHtml(group.aliases.join('・'))}）</span>`
+          : '';
+      const headerActions = group.childId
+        ? `
+          <button class="icon-btn" data-child-action="edit-child" data-cid="${group.childId}">編集</button>
+          <button class="icon-btn danger" data-child-action="delete-child" data-cid="${group.childId}">登録解除</button>`
+        : `<button class="icon-btn" data-child-action="register" data-name="${escapeHtml(group.displayName)}">登録</button>`;
+
+      const groupEl = document.createElement('div');
+      groupEl.className = 'child-group';
+      groupEl.innerHTML = `
+        <h3>
+          <span class="child-title">${escapeHtml(group.displayName)}${aliasText} <span class="count">${sortedRecords.length}件</span></span>
+          <span class="group-actions">${headerActions}</span>
+        </h3>
+        ${sortedRecords.map(renderEntry).join('') ||
+          '<p class="empty-msg" style="padding:12px 0;">該当する記録はまだありません。</p>'}
       `;
-      listEl.appendChild(group);
+      listEl.appendChild(groupEl);
+    });
+
+    if (unclassified.length > 0) {
+      const sorted = unclassified
+        .slice()
+        .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+      const groupEl = document.createElement('div');
+      groupEl.className = 'child-group unclassified';
+      groupEl.innerHTML = `
+        <h3>
+          <span class="child-title">未分類 <span class="count">${sorted.length}件</span></span>
+        </h3>
+        ${sorted.map(renderEntry).join('')}
+      `;
+      listEl.appendChild(groupEl);
+    }
+
+    // 記録の編集・削除
+    listEl.querySelectorAll('button[data-action]').forEach((btn) => {
+      btn.addEventListener('click', () => handleRecordAction(btn));
+    });
+    // 子供（登録）の編集・削除・登録
+    listEl.querySelectorAll('button[data-child-action]').forEach((btn) => {
+      btn.addEventListener('click', () => handleChildAction(btn));
+    });
+  };
+
+  // 子供登録の操作
+  const handleChildAction = (btn) => {
+    const action = btn.dataset.childAction;
+    if (action === 'register') {
+      const name = btn.dataset.name;
+      const aliases = prompt(
+        `「${name}」を登録します。別の表記があればカンマ区切りで（任意）：`,
+        ''
+      );
+      if (aliases === null) return;
+      children.push({
+        id: newId(),
+        name: katakanaToHiragana(name),
+        aliases: splitAliases(aliases),
+      });
+      saveChildren(children);
+      renderChildren();
+    } else if (action === 'edit-child') {
+      const cid = btn.dataset.cid;
+      const child = children.find((c) => c.id === cid);
+      if (!child) return;
+      const newName = prompt('名前（ひらがな）', child.name);
+      if (newName === null) return;
+      const newAliases = prompt('別の表記（カンマ区切り・任意）', (child.aliases || []).join('，'));
+      if (newAliases === null) return;
+      child.name = katakanaToHiragana(newName.trim()) || child.name;
+      child.aliases = splitAliases(newAliases);
+      saveChildren(children);
+      renderChildren();
+    } else if (action === 'delete-child') {
+      const cid = btn.dataset.cid;
+      const child = children.find((c) => c.id === cid);
+      if (!child) return;
+      if (
+        confirm(
+          `「${child.name}」の登録を解除しますか？（記録自体は削除されません）`
+        )
+      ) {
+        children = children.filter((c) => c.id !== cid);
+        saveChildren(children);
+        renderChildren();
+      }
+    }
+  };
+
+  const initChildrenForm = () => {
+    const form = document.getElementById('addChildForm');
+    if (!form) return;
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const name = katakanaToHiragana(($('#newChildName').value || '').trim());
+      const aliases = splitAliases($('#newChildAliases').value || '');
+      if (!name) return;
+      // 既登録チェック
+      if (children.some((c) => c.name === name)) {
+        alert(`「${name}」はすでに登録されています。`);
+        return;
+      }
+      children.push({ id: newId(), name, aliases });
+      saveChildren(children);
+      $('#newChildName').value = '';
+      $('#newChildAliases').value = '';
+      renderChildren();
+    });
+
+    // 入力中もカタカナ→ひらがなに正規化
+    const nameInput = $('#newChildName');
+    nameInput.addEventListener('input', () => {
+      const start = nameInput.selectionStart;
+      const converted = katakanaToHiragana(nameInput.value);
+      if (converted !== nameInput.value) {
+        nameInput.value = converted;
+        try { nameInput.setSelectionRange(start, start); } catch (_) {}
+      }
     });
   };
 
@@ -474,6 +670,19 @@
     });
   };
 
+  const initNameInputNormalize = () => {
+    const el = $('#childNameInput');
+    if (!el) return;
+    el.addEventListener('input', () => {
+      const start = el.selectionStart;
+      const converted = katakanaToHiragana(el.value);
+      if (converted !== el.value) {
+        el.value = converted;
+        try { el.setSelectionRange(start, start); } catch (_) {}
+      }
+    });
+  };
+
   // ---------- 起動 ----------
   document.addEventListener('DOMContentLoaded', () => {
     initTabs();
@@ -481,6 +690,8 @@
     initSaveActions();
     initSearch();
     initExport();
+    initChildrenForm();
+    initNameInputNormalize();
     renderList();
     renderChildren();
   });
