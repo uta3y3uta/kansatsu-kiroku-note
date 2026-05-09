@@ -277,6 +277,8 @@
     if (newNames === null) return;
     rec.text = newText.trim() || rec.text;
     rec.names = splitNames(newNames);
+    // 編集したら手動配置はリセットして自動分類に戻す
+    delete rec.groups;
     saveRecords(records);
     renderList();
     renderChildren();
@@ -298,13 +300,152 @@
   };
 
   // ---------- 子供別 ----------
-  // 各記録について，登録された子供（名前＋別表記）または記録自身のnames配列に
-  // 一致する子供グループを返す。本文に名前が含まれていれば自動でふりわけ。
-  const childMatchesRecord = (child, record) => {
-    const candidates = [child.name, ...(child.aliases || [])].filter(Boolean);
-    if (record.names.some((n) => candidates.includes(n))) return true;
-    if (candidates.some((c) => record.text.includes(c))) return true;
-    return false;
+  // 自動分類：登録された子供の名前/別表記が，記録の本文・names配列に含まれていればその子供グループへ
+  const computeAutoGroups = (record) => {
+    const result = new Set();
+    children.forEach((c) => {
+      const candidates = [c.name, ...(c.aliases || [])].filter(Boolean);
+      const inNames = record.names.some((n) => candidates.includes(n));
+      const inText = candidates.some((s) => record.text.includes(s));
+      if (inNames || inText) result.add(c.name);
+    });
+    // 未登録の名前（names欄）もグループ化
+    record.names.forEach((n) => {
+      if (!n) return;
+      const isRegistered = children.some(
+        (c) => c.name === n || (c.aliases || []).includes(n)
+      );
+      if (!isRegistered) result.add(n);
+    });
+    return result;
+  };
+
+  // 現在の所属グループ：手動配置（rec.groups）があれば優先，なければ自動分類
+  const computeCurrentGroups = (record) => {
+    if (Array.isArray(record.groups)) return new Set(record.groups);
+    return computeAutoGroups(record);
+  };
+
+  // ドラッグ&ドロップで記録を子供グループ間で移動
+  const moveRecord = (id, sourceGroup, targetGroup) => {
+    const rec = records.find((r) => r.id === id);
+    if (!rec) return;
+    if ((sourceGroup || '') === (targetGroup || '')) return;
+    const groups = new Set(computeCurrentGroups(rec));
+    if (sourceGroup) groups.delete(sourceGroup);
+    if (targetGroup) groups.add(targetGroup);
+    rec.groups = [...groups];
+    saveRecords(records);
+    renderList();
+    renderChildren();
+  };
+
+  const setupDragDrop = (listEl) => {
+    let draggingId = null;
+    let draggingSource = null;
+    let touchTimer = null;
+    let touchActive = false;
+    let lastDropTarget = null;
+
+    const clearDropTargets = () => {
+      listEl
+        .querySelectorAll('.child-group.drop-target')
+        .forEach((g) => g.classList.remove('drop-target'));
+    };
+
+    // ---- マウス（HTML5 DnD） ----
+    listEl.querySelectorAll('.child-entry[draggable="true"]').forEach((el) => {
+      el.addEventListener('dragstart', (e) => {
+        draggingId = el.dataset.id;
+        draggingSource = el.dataset.source || '';
+        el.classList.add('dragging');
+        if (e.dataTransfer) {
+          e.dataTransfer.effectAllowed = 'move';
+          try { e.dataTransfer.setData('text/plain', draggingId); } catch (_) {}
+        }
+      });
+      el.addEventListener('dragend', () => {
+        el.classList.remove('dragging');
+        clearDropTargets();
+        draggingId = null;
+        draggingSource = null;
+      });
+    });
+
+    listEl.querySelectorAll('.child-group').forEach((group) => {
+      group.addEventListener('dragenter', (e) => {
+        if (!draggingId) return;
+        e.preventDefault();
+        group.classList.add('drop-target');
+      });
+      group.addEventListener('dragover', (e) => {
+        if (!draggingId) return;
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+      });
+      group.addEventListener('dragleave', (e) => {
+        if (!group.contains(e.relatedTarget)) {
+          group.classList.remove('drop-target');
+        }
+      });
+      group.addEventListener('drop', (e) => {
+        e.preventDefault();
+        group.classList.remove('drop-target');
+        if (!draggingId) return;
+        const target = group.dataset.group || '';
+        moveRecord(draggingId, draggingSource || '', target);
+      });
+    });
+
+    // ---- タッチ（長押しでドラッグ開始） ----
+    listEl.querySelectorAll('.child-entry').forEach((el) => {
+      el.addEventListener('touchstart', (e) => {
+        // ボタン上のタッチは無視
+        if (e.target.closest('button')) return;
+        touchTimer = setTimeout(() => {
+          touchActive = true;
+          draggingId = el.dataset.id;
+          draggingSource = el.dataset.source || '';
+          el.classList.add('dragging');
+          if (navigator.vibrate) navigator.vibrate(15);
+        }, 350);
+      }, { passive: true });
+
+      el.addEventListener('touchmove', (e) => {
+        if (!touchActive) {
+          // 長押し前に動いたらキャンセル
+          if (touchTimer) { clearTimeout(touchTimer); touchTimer = null; }
+          return;
+        }
+        e.preventDefault();
+        const t = e.touches[0];
+        const elemBelow = document.elementFromPoint(t.clientX, t.clientY);
+        const groupBelow = elemBelow ? elemBelow.closest('.child-group') : null;
+        if (groupBelow !== lastDropTarget) {
+          clearDropTargets();
+          if (groupBelow) groupBelow.classList.add('drop-target');
+          lastDropTarget = groupBelow;
+        }
+      }, { passive: false });
+
+      const endTouch = () => {
+        if (touchTimer) { clearTimeout(touchTimer); touchTimer = null; }
+        if (touchActive) {
+          el.classList.remove('dragging');
+          if (lastDropTarget && draggingId) {
+            const target = lastDropTarget.dataset.group || '';
+            moveRecord(draggingId, draggingSource || '', target);
+          }
+          clearDropTargets();
+          lastDropTarget = null;
+          touchActive = false;
+          draggingId = null;
+          draggingSource = null;
+        }
+      };
+      el.addEventListener('touchend', endTouch);
+      el.addEventListener('touchcancel', endTouch);
+    });
   };
 
   const renderChildren = () => {
@@ -312,11 +453,10 @@
     const emptyEl = $('#childrenEmpty');
     listEl.innerHTML = '';
 
-    // グループ集合：登録済み子供＋記録のnamesに含まれる名前
+    // グループ集合：登録済み子供＋現在のグループに登場する全名前
     const groupMap = new Map();
     children.forEach((c) => {
       groupMap.set(c.name, {
-        key: c.name,
         displayName: c.name,
         aliases: c.aliases || [],
         records: [],
@@ -324,11 +464,10 @@
       });
     });
     records.forEach((r) => {
-      r.names.forEach((n) => {
-        if (!groupMap.has(n)) {
-          groupMap.set(n, {
-            key: n,
-            displayName: n,
+      computeCurrentGroups(r).forEach((name) => {
+        if (!groupMap.has(name)) {
+          groupMap.set(name, {
+            displayName: name,
             aliases: [],
             records: [],
             childId: null,
@@ -338,26 +477,22 @@
     });
 
     // ふりわけ
-    const matchedRecordIds = new Set();
-    groupMap.forEach((group) => {
-      records.forEach((r) => {
-        const child = { name: group.displayName, aliases: group.aliases };
-        if (childMatchesRecord(child, r)) {
-          group.records.push(r);
-          matchedRecordIds.add(r.id);
-        }
+    records.forEach((r) => {
+      computeCurrentGroups(r).forEach((name) => {
+        const g = groupMap.get(name);
+        if (g) g.records.push(r);
       });
     });
 
     const sortedGroups = [...groupMap.values()].sort((a, b) =>
       a.displayName.localeCompare(b.displayName, 'ja')
     );
-
     const visibleGroups = sortedGroups.filter(
       (g) => g.records.length > 0 || g.childId
     );
-
-    const unclassified = records.filter((r) => !matchedRecordIds.has(r.id));
+    const unclassified = records.filter(
+      (r) => computeCurrentGroups(r).size === 0
+    );
 
     if (visibleGroups.length === 0 && unclassified.length === 0) {
       emptyEl.style.display = 'block';
@@ -365,13 +500,16 @@
     }
     emptyEl.style.display = 'none';
 
-    const renderEntry = (r) => `
-      <div class="child-entry">
-        <span class="timestamp">${formatTimestamp(r.timestamp)}</span>
-        <div class="record-text">${escapeHtml(r.text)}</div>
-        <div class="record-actions">
-          <button class="icon-btn" data-action="edit" data-id="${r.id}">編集</button>
-          <button class="icon-btn danger" data-action="delete" data-id="${r.id}">削除</button>
+    const renderEntry = (r, sourceGroup) => `
+      <div class="child-entry" draggable="true" data-id="${r.id}" data-source="${escapeHtml(sourceGroup)}" title="ドラッグして他の子供へ移動できます">
+        <span class="drag-handle" aria-hidden="true">⋮⋮</span>
+        <div class="entry-body">
+          <span class="timestamp">${formatTimestamp(r.timestamp)}</span>
+          <div class="record-text">${escapeHtml(r.text)}</div>
+          <div class="record-actions">
+            <button class="icon-btn" data-action="edit" data-id="${r.id}">編集</button>
+            <button class="icon-btn danger" data-action="delete" data-id="${r.id}">削除</button>
+          </div>
         </div>
       </div>`;
 
@@ -391,13 +529,16 @@
 
       const groupEl = document.createElement('div');
       groupEl.className = 'child-group';
+      groupEl.dataset.group = group.displayName;
       groupEl.innerHTML = `
         <h3>
           <span class="child-title">${escapeHtml(group.displayName)}${aliasText} <span class="count">${sortedRecords.length}件</span></span>
           <span class="group-actions">${headerActions}</span>
         </h3>
-        ${sortedRecords.map(renderEntry).join('') ||
-          '<p class="empty-msg" style="padding:12px 0;">該当する記録はまだありません。</p>'}
+        <div class="entries-area">
+          ${sortedRecords.map((r) => renderEntry(r, group.displayName)).join('') ||
+            '<p class="drop-hint">ここに記録をドラッグして移動できます</p>'}
+        </div>
       `;
       listEl.appendChild(groupEl);
     });
@@ -408,23 +549,34 @@
         .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
       const groupEl = document.createElement('div');
       groupEl.className = 'child-group unclassified';
+      groupEl.dataset.group = '';
       groupEl.innerHTML = `
         <h3>
           <span class="child-title">未分類 <span class="count">${sorted.length}件</span></span>
         </h3>
-        ${sorted.map(renderEntry).join('')}
+        <div class="entries-area">
+          ${sorted.map((r) => renderEntry(r, '')).join('')}
+        </div>
       `;
       listEl.appendChild(groupEl);
     }
 
     // 記録の編集・削除
     listEl.querySelectorAll('button[data-action]').forEach((btn) => {
-      btn.addEventListener('click', () => handleRecordAction(btn));
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        handleRecordAction(btn);
+      });
     });
     // 子供（登録）の編集・削除・登録
     listEl.querySelectorAll('button[data-child-action]').forEach((btn) => {
-      btn.addEventListener('click', () => handleChildAction(btn));
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        handleChildAction(btn);
+      });
     });
+    // ドラッグ&ドロップ有効化
+    setupDragDrop(listEl);
   };
 
   // 子供登録の操作
