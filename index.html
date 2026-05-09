@@ -2,7 +2,10 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#e07b5a" />
   <title>観察記録ノート</title>
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -65,6 +68,9 @@
         <div class="export-row">
           <button id="exportXlsxBtn" class="primary-btn">Excelに書き出し</button>
           <button id="exportCsvBtn" class="secondary-btn">CSV（Googleスプレッドシート）</button>
+          <button id="exportJsonBtn" class="secondary-btn" title="端末間移行用の完全バックアップ">JSONバックアップ</button>
+          <button id="importJsonBtn" class="ghost-btn" title="他端末で書き出したJSONを取り込む">JSON取り込み</button>
+          <input type="file" id="importJsonInput" accept="application/json,.json" hidden />
           <button id="clearAllBtn" class="danger-btn">全削除</button>
         </div>
       </div>

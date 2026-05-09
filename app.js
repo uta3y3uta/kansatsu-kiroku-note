@@ -374,9 +374,88 @@
     URL.revokeObjectURL(url);
   };
 
+  const exportJson = () => {
+    if (records.length === 0) {
+      alert('書き出す記録がありません。');
+      return;
+    }
+    const payload = {
+      app: 'kansatsu-kiroku-note',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      records,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: 'application/json;charset=utf-8;',
+    });
+    const today = new Date();
+    const fname = `観察記録バックアップ_${today.getFullYear()}${pad(today.getMonth() + 1)}${pad(today.getDate())}.json`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fname;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const importJson = (file) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target.result);
+        const incoming = Array.isArray(data) ? data : data.records;
+        if (!Array.isArray(incoming)) throw new Error('不正な形式です');
+
+        const valid = incoming.filter(
+          (r) =>
+            r &&
+            typeof r.text === 'string' &&
+            typeof r.timestamp === 'string' &&
+            Array.isArray(r.names)
+        );
+        if (valid.length === 0) {
+          alert('取り込める記録が見つかりませんでした。');
+          return;
+        }
+
+        const existingIds = new Set(records.map((r) => r.id));
+        const existingKeys = new Set(
+          records.map((r) => `${r.timestamp}::${r.text}`)
+        );
+        let added = 0;
+        valid.forEach((r) => {
+          const id = r.id || `${Date.parse(r.timestamp) || Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+          const key = `${r.timestamp}::${r.text}`;
+          if (existingIds.has(id) || existingKeys.has(key)) return;
+          records.push({ id, timestamp: r.timestamp, text: r.text, names: r.names });
+          existingIds.add(id);
+          existingKeys.add(key);
+          added++;
+        });
+        records.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+        saveRecords(records);
+        renderList();
+        renderChildren();
+        alert(`取り込み完了：${added}件を追加しました（重複はスキップ）。`);
+      } catch (err) {
+        alert(`取り込みに失敗しました：${err.message}`);
+      }
+    };
+    reader.readAsText(file);
+  };
+
   const initExport = () => {
     $('#exportXlsxBtn').addEventListener('click', exportXlsx);
     $('#exportCsvBtn').addEventListener('click', exportCsv);
+    $('#exportJsonBtn').addEventListener('click', exportJson);
+    $('#importJsonBtn').addEventListener('click', () => $('#importJsonInput').click());
+    $('#importJsonInput').addEventListener('change', (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (file) importJson(file);
+      e.target.value = '';
+    });
     $('#clearAllBtn').addEventListener('click', () => {
       if (records.length === 0) {
         alert('削除する記録がありません。');

@@ -107,13 +107,16 @@ input[type="search"],
 textarea {
   width: 100%;
   padding: 10px 12px;
-  font-size: 1rem;
+  /* iOSでフォーカス時に自動ズームしないよう16px以上を指定 */
+  font-size: 16px;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: #fffdf9;
   color: var(--text);
   font-family: inherit;
   transition: border-color 0.15s ease;
+  -webkit-appearance: none;
+  appearance: none;
 }
 input:focus, textarea:focus {
   outline: none;
@@ -143,6 +146,9 @@ textarea { resize: vertical; min-height: 110px; }
   gap: 6px;
   box-shadow: 0 6px 18px rgba(224, 123, 90, 0.35);
   transition: transform 0.12s ease, box-shadow 0.18s ease;
+  /* タップ時のハイライトを抑える */
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 .mic-btn:hover { transform: translateY(-2px); }
 .mic-btn:active { transform: translateY(1px); }
@@ -335,9 +341,20 @@ textarea { resize: vertical; min-height: 110px; }
 }
 
 @media (max-width: 480px) {
+  .app-header { padding: 18px 12px 8px; }
   .app-header h1 { font-size: 1.35rem; }
-  .mic-btn { width: 116px; height: 116px; }
+  .subtitle { font-size: 0.82rem; }
+  .tab-nav { margin: 8px auto 12px; }
+  .tab-btn { padding: 12px 8px; font-size: 0.9rem; }
+  main { padding: 0 12px 60px; }
+  .recorder-card { padding: 16px; border-radius: 14px; }
+  .mic-btn { width: 140px; height: 140px; }
+  .mic-icon { width: 38px; height: 38px; }
+  .action-row { flex-direction: column; }
+  .action-row button { width: 100%; padding: 12px; }
   .toolbar { flex-direction: column; align-items: stretch; }
-  .export-row { justify-content: stretch; }
-  .export-row button { flex: 1; }
+  .export-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .export-row button { width: 100%; padding: 10px; font-size: 0.88rem; }
+  .export-row .danger-btn { grid-column: span 2; }
+  .record-actions button { padding: 8px 12px; font-size: 0.85rem; }
 }
