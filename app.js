@@ -105,6 +105,7 @@
     recognition.lang = 'ja-JP';
     recognition.continuous = true;
     recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
 
     recognition.onstart = () => {
       isRecording = true;
@@ -115,29 +116,36 @@
 
     recognition.onresult = (event) => {
       let interim = '';
-      let finalAdd = '';
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) finalAdd += transcript;
-        else interim += transcript;
+        if (event.results[i].isFinal) {
+          appendFinal(transcript);
+        } else {
+          interim += transcript;
+        }
       }
-      if (finalAdd) {
-        baseText = (baseText + (baseText ? ' ' : '') + finalAdd).trim();
-      }
-      interimText = interim;
+      interimText = interim.trim();
       const memo = $('#memoText');
-      memo.value = (baseText + (interim ? ' ' + interim : '')).trim();
+      memo.value = baseText + interimText;
     };
 
     recognition.onerror = (event) => {
+      // 「無音」エラーは無視（自動再開でリカバリ）
+      if (event.error === 'no-speech' || event.error === 'aborted') return;
       micStatus.textContent = `音声入力エラー：${event.error}`;
-      stopRecording();
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        stopRecording();
+      }
     };
 
     recognition.onend = () => {
       if (isRecording) {
-        // 連続モード時に自然終了したら再開
-        try { recognition.start(); } catch (_) {}
+        // 連続モード時に自然終了したら少し待ってから再開
+        setTimeout(() => {
+          if (isRecording) {
+            try { recognition.start(); } catch (_) {}
+          }
+        }, 80);
       }
     };
 
@@ -145,6 +153,36 @@
       if (isRecording) stopRecording();
       else startRecording();
     });
+  };
+
+  // ---------- 音声テキスト整形 ----------
+  // 短く独立した発話の場合，句読点コマンドとして扱う
+  const VOICE_PERIOD = ['まる', 'マル', '。', '．', '句点', 'ピリオド'];
+  const VOICE_COMMA = ['てん', 'テン', '、', '，', ',', '読点', 'カンマ', 'コンマ'];
+  const VOICE_NEWLINE = ['かいぎょう', 'カイギョウ', '改行'];
+  const VOICE_PARAGRAPH = ['だんらく', 'ダンラク', '段落'];
+
+  const finalizeSegment = (text) => {
+    const trimmed = text.trim();
+    if (!trimmed) return '';
+    if (VOICE_PERIOD.includes(trimmed)) return '。';
+    if (VOICE_COMMA.includes(trimmed)) return '，';
+    if (VOICE_NEWLINE.includes(trimmed)) return '\n';
+    if (VOICE_PARAGRAPH.includes(trimmed)) return '\n\n';
+    // 末尾に句点等がなければ補う
+    if (/[。．！？!?\n、，]$/.test(trimmed)) return trimmed;
+    return trimmed + '。';
+  };
+
+  const appendFinal = (segment) => {
+    const piece = finalizeSegment(segment);
+    if (!piece) return;
+    // baseTextの末尾と新しい断片の先頭が両方とも句点系なら，
+    // 重複を避けるため末尾の句点を削る
+    if (/[。．！？!?]$/.test(baseText) && /^[。．！？!?，、]/.test(piece)) {
+      baseText = baseText.replace(/[。．！？!?]+$/, '');
+    }
+    baseText += piece;
   };
 
   const startRecording = () => {
@@ -167,8 +205,9 @@
     micBtn.classList.remove('recording');
     micBtn.querySelector('.mic-label').textContent = '押して話す';
     $('#micStatus').textContent = '録音を停止しました。内容を確認して保存できます。';
+    // 残った中間結果を整形して取り込む
     if (interimText) {
-      baseText = (baseText + (baseText ? ' ' : '') + interimText).trim();
+      appendFinal(interimText);
       $('#memoText').value = baseText;
       interimText = '';
     }
